@@ -1,6 +1,18 @@
 {
   "replacements": {
-    "{NOMBRE_OPTICA}": "OCNILENTES"
+    "OPTICA INTEROPTICAS DE OCCIDENTE SAS": "OCNILENTES",
+    "OCNILENTES -OPTICAL": "OCNILENTES",
+    "2019":"FECHA EMISION",
+    "2017":"FECHA EMISION",
+    "981502-16":"numero de matricula",
+    "Av. 4 norte 23N-13 VERSALLES": " Dirección datos legales",
+    "3480242": "datos legales telefono",
+    "901.068.699-9": "datos legales NIT",
+    "NATURALPHARM LABORATORIES": "datos legales Razon social",
+    "900.040.006": "datos legales No representante legal",
+    "4771 - 4773 - 4774": "datos legales actividad",
+    "SANTIAGO DE CALI": "datos legales ciudad",
+    "MARIA PAULA CASTILLO PISSO": "Nombre optometra"
   },
    "image_replacements": {
     "{LOGO}": "assets/logo.png"
@@ -8,3 +20,4 @@
   "image_path": "assets/firma.png",
   "image_keyword": "{FIRMA}"
 }
+
