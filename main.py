@@ -2,27 +2,35 @@ import os
 import json
 import time
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from processor.word_editor import process_word_file
 from processor.excel_editor import process_excel_file 
 
 
-from processor.word_editor import process_word_file
-from processor.excel_editor import process_excel_file  # 👈 importar
-
-
-def ejecutar_proceso(valores_usuario, imagenes_usuario, carpeta_entrada_var, carpeta_salida_var):
+def ejecutar_proceso(valores_usuario, imagenes_usuario, carpeta_entrada_var, carpeta_salida_var, progress_var, progress_bar, status_label):
+    """Ejecuta el proceso de reemplazo con barra de progreso y mejor manejo de errores."""
     start_time = time.time()
 
     # Obtener valores de reemplazo
     replacements = {key: entrada.get() for key, entrada in valores_usuario.items()}
+    
+    # Filtrar reemplazos vacíos (opcional)
+    replacements = {k: v for k, v in replacements.items() if v.strip()}
 
-    # Obtener imágenes
+    # Obtener imágenes con información completa
     image_replacements = {}
     for key, info in imagenes_usuario.items():
         ruta = info["path_var"].get()
-        if ruta:
-            image_replacements[key] = ruta
+        if ruta and os.path.exists(ruta):  # 👈 Verificar que existe
+            # Usar formato completo de imagen si hay información adicional
+            if "width_cm" in info or "height_cm" in info:
+                image_replacements[key] = {
+                    "path": ruta,
+                    "width_cm": info.get("width_cm", 3.5),
+                    "height_cm": info.get("height_cm", 1.5)
+                }
+            else:
+                image_replacements[key] = ruta
 
     carpeta_entrada = carpeta_entrada_var.get()
     carpeta_salida = carpeta_salida_var.get()
@@ -34,8 +42,24 @@ def ejecutar_proceso(valores_usuario, imagenes_usuario, carpeta_entrada_var, car
         messagebox.showwarning("Advertencia", "Debe seleccionar una carpeta de salida.")
         return
 
+    # Contar archivos total para barra de progreso
+    total_files = 0
+    for dirpath, _, filenames in os.walk(carpeta_entrada):
+        for filename in filenames:
+            if filename.lower().endswith((".docx", ".xlsx")):
+                total_files += 1
+
+    if total_files == 0:
+        messagebox.showinfo("Información", "No se encontraron archivos .docx o .xlsx en la carpeta seleccionada.")
+        return
+
+    # Configurar barra de progreso
+    progress_var.set(0)
+    progress_bar["maximum"] = total_files
+
     procesados = 0
-    errores = []  # 👈 lista de errores
+    errores = []
+    archivos_procesados = []
 
     for dirpath, _, filenames in os.walk(carpeta_entrada):
         for filename in filenames:
@@ -49,6 +73,10 @@ def ejecutar_proceso(valores_usuario, imagenes_usuario, carpeta_entrada_var, car
 
                 output_path = os.path.join(output_dir, filename)
                 relative_input = os.path.relpath(input_path, carpeta_entrada)
+
+                # Actualizar status
+                status_label.config(text=f"Procesando: {relative_input}")
+                status_label.update()
 
                 try:
                     print(f"Procesando {relative_input} -> {output_path}")
@@ -70,6 +98,7 @@ def ejecutar_proceso(valores_usuario, imagenes_usuario, carpeta_entrada_var, car
                         )
 
                     procesados += 1
+                    archivos_procesados.append(relative_input)
 
                 except Exception as e:
                     tipo = "Word" if filename.lower().endswith(".docx") else "Excel"
@@ -77,127 +106,253 @@ def ejecutar_proceso(valores_usuario, imagenes_usuario, carpeta_entrada_var, car
                     print(f"⚠️ Error en {error_msg}")
                     errores.append(error_msg)
 
+                # Actualizar barra de progreso
+                progress_var.set(procesados + len(errores))
+                progress_bar.update()
+
     end_time = time.time()
     duration = end_time - start_time
 
-    # Mensaje final
-    if errores:
-        log_path = os.path.join(carpeta_salida, "errores.log")
-        with open(log_path, "w", encoding="utf-8") as f:
-            f.write("=== Archivos con errores ===\n\n")
+    # Limpiar status
+    status_label.config(text="Proceso completado")
+
+    # Crear log detallado
+    log_path = os.path.join(carpeta_salida, "proceso_log.txt")
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write("=== REPORTE DE PROCESAMIENTO ===\n\n")
+        f.write(f"Fecha: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Tiempo total: {duration:.2f} segundos\n")
+        f.write(f"Archivos procesados: {procesados}\n")
+        f.write(f"Archivos con errores: {len(errores)}\n\n")
+        
+        if replacements:
+            f.write("=== REEMPLAZOS DE TEXTO APLICADOS ===\n")
+            for key, value in replacements.items():
+                f.write(f"{key} -> {value}\n")
+            f.write("\n")
+        
+        if image_replacements:
+            f.write("=== REEMPLAZOS DE IMÁGENES APLICADOS ===\n")
+            for key, value in image_replacements.items():
+                if isinstance(value, dict):
+                    f.write(f"{key} -> {value['path']}\n")
+                else:
+                    f.write(f"{key} -> {value}\n")
+            f.write("\n")
+
+        if archivos_procesados:
+            f.write("=== ARCHIVOS PROCESADOS CORRECTAMENTE ===\n")
+            for archivo in archivos_procesados:
+                f.write(f"✓ {archivo}\n")
+            f.write("\n")
+
+        if errores:
+            f.write("=== ARCHIVOS CON ERRORES ===\n")
             for err in errores:
-                f.write(err + "\n")
-            f.write(f"\nTotal errores: {len(errores)}\n")
+                f.write(f"✗ {err}\n")
+
+    # Mensaje final mejorado
+    if errores:
         mensaje = (
-            f"✔️ {procesados} documentos procesados.\n"
+            f"✔️ {procesados} documentos procesados correctamente.\n"
             f"❌ {len(errores)} documentos con errores.\n"
             f"🕒 Tiempo: {duration:.2f} segundos.\n\n"
-            f"📄 Revisa el archivo 'errores.log' en la carpeta de salida."
+            f"📄 Revisa el archivo 'proceso_log.txt' en la carpeta de salida para detalles."
         )
+        messagebox.showwarning("Proceso completado con errores", mensaje)
     else:
         mensaje = (
+            f"🎉 ¡Proceso completado exitosamente!\n\n"
             f"✔️ {procesados} documentos procesados.\n"
             f"🕒 Tiempo: {duration:.2f} segundos.\n\n"
-            "🎉 Todos fueron procesados correctamente."
+            f"📄 Log detallado guardado en 'proceso_log.txt'"
         )
-
-    messagebox.showinfo("Proceso completado", mensaje)
-
+        messagebox.showinfo("Proceso completado", mensaje)
 
 
 def seleccionar_imagen(info):
+    """Selecciona una imagen con validación mejorada."""
     ruta = filedialog.askopenfilename(
         title="Seleccionar imagen",
-        filetypes=[("Imágenes", "*.png;*.jpg;*.jpeg;*.bmp")]
+        filetypes=[
+            ("Todas las imágenes", "*.png *.jpg *.jpeg *.bmp *.gif *.tiff"),
+            ("PNG", "*.png"),
+            ("JPEG", "*.jpg *.jpeg"),
+            ("BMP", "*.bmp"),
+            ("Todos los archivos", "*.*")
+        ]
     )
     if ruta:
-        info["path_var"].set(ruta)
+        if os.path.exists(ruta):
+            info["path_var"].set(ruta)
+        else:
+            messagebox.showerror("Error", "El archivo seleccionado no existe.")
 
 
-def seleccionar_documentos(archivos_var):
-    rutas = filedialog.askopenfilenames(
-        title="Seleccionar documentos",
-        filetypes=[("Word", "*.docx")]
-    )
-    if rutas:
-        archivos_var.set(";".join(rutas))
-
-
-def seleccionar_carpeta(carpeta_var):
-    carpeta = filedialog.askdirectory(title="Seleccionar carpeta de salida")
+def seleccionar_carpeta(carpeta_var, titulo="Seleccionar carpeta"):
+    """Selecciona una carpeta con título personalizable."""
+    carpeta = filedialog.askdirectory(title=titulo)
     if carpeta:
         carpeta_var.set(carpeta)
 
 
+def validar_configuracion():
+    """Valida que existe el archivo de configuración."""
+    if not os.path.exists('config.json'):
+        messagebox.showerror(
+            "Error de configuración", 
+            "No se encontró el archivo 'config.json'.\n"
+            "Por favor, asegúrate de que existe en el mismo directorio que este programa."
+        )
+        return False
+    return True
+
+
 def main():
-    # Cargar config.json SOLO para las claves
-    with open('config.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
+    """Función principal con interfaz mejorada."""
+    # Validar configuración
+    if not validar_configuracion():
+        return
+
+    # Cargar config.json
+    try:
+        with open('config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except Exception as e:
+        messagebox.showerror("Error", f"Error al cargar config.json: {str(e)}")
+        return
 
     replacements_config = config.get("replacements", {})
     image_replacements_config = config.get("image_replacements", {})
 
-    # Crear ventana
+    # Crear ventana principal
     ventana = tk.Tk()
-    ventana.title("Generador de Documentos")
-    ventana.geometry("600x600")
+    ventana.title("Generador de Documentos v2.0")
+    ventana.geometry("700x700")
+    ventana.configure(bg="#f0f0f0")
 
-    tk.Label(ventana, text="Ingrese los valores de texto:", font=("Arial", 12, "bold")).pack(pady=10)
+    # Crear un canvas con scrollbar para contenido largo
+    canvas = tk.Canvas(ventana, bg="#f0f0f0")
+    scrollbar = ttk.Scrollbar(ventana, orient="vertical", command=canvas.yview)
+    scrollable_frame = ttk.Frame(canvas)
 
-    # Crear entradas dinámicamente para texto
-    valores_usuario = {}
-    for key in replacements_config.keys():
-        frame = tk.Frame(ventana)
-        frame.pack(pady=5, fill="x", padx=20)
-        tk.Label(frame, text=key, width=20, anchor="w").pack(side="left")
-        entrada = tk.Entry(frame, width=30)
-        entrada.pack(side="left", expand=True, fill="x")
-        valores_usuario[key] = entrada
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
 
-    # Crear botones para selección de imágenes
-    tk.Label(ventana, text="Seleccione las imágenes:", font=("Arial", 12, "bold")).pack(pady=10)
-    imagenes_usuario = {}
-    for key in image_replacements_config.keys():
-        frame = tk.Frame(ventana)
-        frame.pack(pady=5, fill="x", padx=20)
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
 
-        tk.Label(frame, text=key, width=20, anchor="w").pack(side="left")
+    # Título principal
+    titulo = tk.Label(scrollable_frame, text="🔄 Generador de Documentos", 
+                      font=("Arial", 16, "bold"), bg="#f0f0f0", fg="#2c3e50")
+    titulo.pack(pady=15)
 
-        path_var = tk.StringVar(value="")  # SIEMPRE en blanco
-        entry = tk.Entry(frame, textvariable=path_var, width=30)
-        entry.pack(side="left", expand=True, fill="x")
+    # Sección de texto
+    if replacements_config:
+        frame_texto = ttk.LabelFrame(scrollable_frame, text="📝 Valores de Texto", padding=10)
+        frame_texto.pack(pady=10, padx=20, fill="x")
 
-        boton = tk.Button(frame, text="Seleccionar", command=lambda i={"path_var": path_var}: seleccionar_imagen(i))
-        boton.pack(side="left", padx=5)
+        valores_usuario = {}
+        for key in replacements_config.keys():
+            frame = ttk.Frame(frame_texto)
+            frame.pack(pady=3, fill="x")
+            
+            ttk.Label(frame, text=key, width=25).pack(side="left")
+            entrada = ttk.Entry(frame, width=40)
+            entrada.pack(side="left", expand=True, fill="x", padx=(10, 0))
+            valores_usuario[key] = entrada
+    else:
+        valores_usuario = {}
 
-        imagenes_usuario[key] = {"path_var": path_var}
+    # Sección de imágenes
+    if image_replacements_config:
+        frame_imagenes = ttk.LabelFrame(scrollable_frame, text="🖼️ Selección de Imágenes", padding=10)
+        frame_imagenes.pack(pady=10, padx=20, fill="x")
 
-    # Variables para carpetas
+        imagenes_usuario = {}
+        for key in image_replacements_config.keys():
+            frame = ttk.Frame(frame_imagenes)
+            frame.pack(pady=3, fill="x")
+
+            ttk.Label(frame, text=key, width=25).pack(side="left")
+
+            path_var = tk.StringVar(value="")
+            entry = ttk.Entry(frame, textvariable=path_var, width=35, state="readonly")
+            entry.pack(side="left", expand=True, fill="x", padx=(10, 5))
+
+            boton = ttk.Button(frame, text="Buscar", width=10,
+                             command=lambda i={"path_var": path_var}: seleccionar_imagen(i))
+            boton.pack(side="left")
+
+            imagenes_usuario[key] = {"path_var": path_var}
+    else:
+        imagenes_usuario = {}
+
+    # Sección de carpetas
+    frame_carpetas = ttk.LabelFrame(scrollable_frame, text="📁 Carpetas de Trabajo", padding=10)
+    frame_carpetas.pack(pady=10, padx=20, fill="x")
+
     carpeta_entrada_var = tk.StringVar(value="")
     carpeta_salida_var = tk.StringVar(value="")
 
-    # Selección de carpeta de entrada
-    frame_in = tk.Frame(ventana)
-    frame_in.pack(pady=10, fill="x", padx=20)
-    tk.Label(frame_in, text="Carpeta entrada:", width=20, anchor="w").pack(side="left")
-    tk.Entry(frame_in, textvariable=carpeta_entrada_var, width=30).pack(side="left", expand=True, fill="x")
-    tk.Button(frame_in, text="Seleccionar", command=lambda: seleccionar_carpeta(carpeta_entrada_var)).pack(side="left", padx=5)
+    # Carpeta de entrada
+    frame_in = ttk.Frame(frame_carpetas)
+    frame_in.pack(pady=3, fill="x")
+    ttk.Label(frame_in, text="Carpeta entrada:", width=25).pack(side="left")
+    ttk.Entry(frame_in, textvariable=carpeta_entrada_var, width=35, state="readonly").pack(side="left", expand=True, fill="x", padx=(10, 5))
+    ttk.Button(frame_in, text="Buscar", width=10, 
+               command=lambda: seleccionar_carpeta(carpeta_entrada_var, "Seleccionar carpeta de entrada")).pack(side="left")
 
-    # Selección de carpeta de salida
-    frame_out = tk.Frame(ventana)
-    frame_out.pack(pady=10, fill="x", padx=20)
-    tk.Label(frame_out, text="Carpeta salida:", width=20, anchor="w").pack(side="left")
-    tk.Entry(frame_out, textvariable=carpeta_salida_var, width=30).pack(side="left", expand=True, fill="x")
-    tk.Button(frame_out, text="Seleccionar", command=lambda: seleccionar_carpeta(carpeta_salida_var)).pack(side="left", padx=5)
+    # Carpeta de salida
+    frame_out = ttk.Frame(frame_carpetas)
+    frame_out.pack(pady=3, fill="x")
+    ttk.Label(frame_out, text="Carpeta salida:", width=25).pack(side="left")
+    ttk.Entry(frame_out, textvariable=carpeta_salida_var, width=35, state="readonly").pack(side="left", expand=True, fill="x", padx=(10, 5))
+    ttk.Button(frame_out, text="Buscar", width=10,
+               command=lambda: seleccionar_carpeta(carpeta_salida_var, "Seleccionar carpeta de salida")).pack(side="left")
+
+    # Sección de progreso
+    frame_progreso = ttk.LabelFrame(scrollable_frame, text="📊 Progreso", padding=10)
+    frame_progreso.pack(pady=10, padx=20, fill="x")
+
+    progress_var = tk.DoubleVar()
+    progress_bar = ttk.Progressbar(frame_progreso, variable=progress_var, length=400)
+    progress_bar.pack(pady=5, fill="x")
+
+    status_label = ttk.Label(frame_progreso, text="Listo para procesar", foreground="green")
+    status_label.pack(pady=5)
 
     # Botón de procesar
-    boton = tk.Button(
-        ventana,
-        text="Procesar Documentos",
-        command=lambda: ejecutar_proceso(valores_usuario, imagenes_usuario, carpeta_entrada_var, carpeta_salida_var),
-        bg="blue", fg="white"
+    boton_procesar = tk.Button(
+        scrollable_frame,
+        text="🚀 Procesar Documentos",
+        command=lambda: ejecutar_proceso(
+            valores_usuario, imagenes_usuario, 
+            carpeta_entrada_var, carpeta_salida_var,
+            progress_var, progress_bar, status_label
+        ),
+        bg="#3498db", fg="white", font=("Arial", 12, "bold"),
+        padx=20, pady=10
     )
-    boton.pack(pady=20)
+    boton_procesar.pack(pady=20)
+
+    # Configurar scroll
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    # Configurar scroll con rueda del mouse
+    def _on_mousewheel(event):
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    
+    canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+    # Centrar ventana
+    ventana.update_idletasks()
+    x = (ventana.winfo_screenwidth() // 2) - (700 // 2)
+    y = (ventana.winfo_screenheight() // 2) - (700 // 2)
+    ventana.geometry(f"700x700+{x}+{y}")
 
     ventana.mainloop()
 
