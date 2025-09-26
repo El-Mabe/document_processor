@@ -1,10 +1,13 @@
 {
   "replacements": {
+    "OPTICA MUNDOLENS": "OCNILENTES",
+    "CALI": "CIUDAD",
+    "VALLE": "COLOMBIA",
     "OPTICA INTEROPTICAS DE OCCIDENTE SAS": "OCNILENTES",
     "OCNILENTES -OPTICAL": "OCNILENTES",
-    "2019":"FECHA EMISION",
-    "2017":"FECHA EMISION",
-    "981502-16":"numero de matricula",
+    "2019": "FECHA EMISION",
+    "2017": "FECHA EMISION",
+    "981502-16": "numero de matricula",
     "Av. 4 norte 23N-13 VERSALLES": " Dirección datos legales",
     "3480242": "datos legales telefono",
     "901.068.699-9": "datos legales NIT",
@@ -14,10 +17,22 @@
     "SANTIAGO DE CALI": "datos legales ciudad",
     "MARIA PAULA CASTILLO PISSO": "Nombre optometra"
   },
-   "image_replacements": {
-    "{LOGO}": "assets/logo.png"
+  "image_replacements": {
+    "placeholder_logo.png": {
+      "maintain_aspect": true,
+      "width_pixels": 300,
+      "height_pixels": 150,
+      "description": "Logo de la empresa"
+    },
+    "placeholder_firma.png": {
+      "maintain_aspect": true,
+      "description": "Firma digital"
+    },
+    "placeholder_foto.png": {
+      "maintain_aspect": true,
+      "description": "Foto personal"
+    }
   },
   "image_path": "assets/firma.png",
   "image_keyword": "{FIRMA}"
 }
-
